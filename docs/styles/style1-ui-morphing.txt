@@ -1,0 +1,43 @@
+اسم الستايل:
+​موشن جرافيك واجهات المستخدم الحديثة والتحويل السلس (Modern UI Morphing & Clean Motion Graphics).
+​وصف بصري تفصيلي شامل:
+​يعتمد هذا الستايل على جمالية الـ "فلات ديزاين" (Flat Design) المدمجة بعمق بصري طفيف. الفيديو يركز بشكل كامل على الأشكال الهندسية النظيفة (Vector Shapes) وعناصر واجهة المستخدم (بطاقات، أزرار، أيقونات، نصوص) التي تتشكل وتتحول (Morph) ديناميكيًا من شكل إلى آخر بسلاسة فائقة ودون أي انقطاع. لا توجد فوضى بصرية؛ بل مساحات سلبية واسعة (Negative Space) تريح العين، مع تركيز دقيق على انسيابية الحركة باستخدام منحنيات سرعة شديدة الانحدار، بحيث تبدو العناصر وكأنها تنبض بالحياة، تطفو على الشاشة بظلال ناعمة وتتفاعل بشكل طبيعي ومرن.
+​تحليل الإيقاع والزمن:
+​سرعة المونتاج والإيقاع العام: إيقاع ديناميكي متذبذب (Snappy). يعتمد على الانطلاق الخاطف للعناصر والتوقف البطيء والناعم. لا يوجد ملل؛ الحركة سريعة وحاسمة في البداية وتستقر برقة.
+​عدد التغييرات البصرية خلال كل 10 ثوانٍ: تقريباً 5 إلى 7 تغييرات حركية أو شكلية (دخول عنصر جديد، تحول زر، توسع شاشة) للحفاظ على انتباه المشاهد بشكل مستمر.
+​توقيت كل حركة وانتقال للكلام: تتزامن الحركات الرئيسية بدقة متناهية مع التعليق الصوتي أو النبضات الموسيقية. الحركة تستغرق حوالي 10 إلى 15 إطاراً (Frames) للوصول لذروة السرعة، ثم 30 إلى 40 إطاراً للاستقرار الناعم.
+​نوع القطع بين اللقطات: لا يوجد قطع صلب (Hard Cut) تقريباً. كل مشهد يتدفق إلى المشهد التالي باستخدام التحويل الشكلي (Morphing) أو توسع العناصر لتملأ الشاشة بالكامل وتشكل خلفية للمشهد التالي (Shape Wipes).
+​تحليل الألوان والإضاءة:
+​اللوحة الأساسية والثانوية: تعتمد على لوحة ألوان حديثة وعالية التباين. الخلفيات غالباً بلون محايد وعميق (رمادي داكن جداً أو أزرق منتصف الليل السادة). العناصر والبطاقات بألوان صلبة تتباين مع الخلفية (مثل الأبيض أو الرمادي الفاتح في الوضع النهاري، أو درجات أفتح من لون الخلفية في الوضع الليلي). الألوان الثانوية للتمييز والأزرار تكون فاقعة ومشرقة (مثل الأزرق الكهربائي النيون، البنفسجي الزاهي، أو البرتقالي المشرق).
+​السطوع والتباين والتشبع: تباين عالٍ جدًا بين النصوص العريضة والخلفيات لتسهيل القراءة. التشبع (Saturation) مقتصر فقط على الألوان الثانوية (الأزرار والتفاعلات) لجذب العين، بينما تظل باقي الشاشة هادئة.
+​نوع الخلفية وملمسها وعمقها: خلفيات ناعمة خالية من الضوضاء (No Grain). أحياناً تُستخدم تدرجات شعاعية (Radial Gradients) خفيفة جداً في منتصف الشاشة لخلق عمق بصري (Depth) دون تشتيت.
+​شكل الإضاءة والظلال والتوهج: إضاءة مسطحة (Flat) تماماً، لكن يتم خلق العمق بواسطة "الظلال الساقطة الناعمة" (Soft Drop Shadows). الظل يكون واسعاً جداً بشفافية منخفضة (Opacity 10-15% و Blur عالي 40-50px) أسفل بطاقات واجهة المستخدم لتبدو وكأنها تطفو. تستخدم تأثيرات التوهج (Outer Glow) الناعمة حول الأزرار النشطة.
+​تحليل النصوص والطباعة:
+​شكل الخطوط وأحجامها وسماكتها: خطوط Sans-serif حديثة وهندسية (مثل Montserrat، Inter، أو Roboto). العناوين الرئيسية ضخمة وذات سماكة عالية جداً (Bold أو Black)، بينما النصوص الفرعية صغيرة الحجم ورفيعة (Regular/Light).
+​المحاذاة ومكان الظهور: المحاذاة تكون دقيقة جداً ومبنية على شبكة (Grid) واضحة؛ إما محاذاة لليسار داخل البطاقات، أو توسيط دقيق في منتصف الشاشة.
+​طريقة ظهور واختفاء النصوص: تظهر النصوص عبر تأثير قناع الانكشاف (Mask Reveal)، حيث تتحرك للأعلى بنعومة تزامناً مع زيادة الشفافية (Opacity) من 0% إلى 100%. يتم استخدام تأخير زمني طفيف (Stagger / Cascade) بين الأسطر أو الكلمات (حوالي 2-3 إطارات تأخير) لإنشاء تأثير تدفقي مريح.
+​ألوان النصوص: بيضاء ناصعة للعناوين على الخلفيات الداكنة، ورمادية فاتحة أو بشفافية 60% للنصوص الفرعية لتكوين تسلسل هرمي بصري (Visual Hierarchy).
+​تحليل حركة الكاميرا:
+​الزووم والتوجه: استخدام كاميرا ثنائية الأبعاد (2D Camera). حركة الزووم للداخل (Zoom In) تكون مستمرة وبطيئة جداً (بمعدل زيادة 1% إلى 2% فقط) لإبقاء المشهد حياً. في أوقات الانتقال، يتم استخدام زووم سريع للخارج (Zoom Out) لاستعراض الواجهة بالكامل.
+​التحريك الجانبي (Pan): حركة انسيابية تتبع اتجاه العناصر المتحركة أو تتبع واجهة مستخدم تسحب لليسار أو اليمين مع تباطؤ شديد النعومة (Extreme Ease Out).
+​تحليل الانتقالات وعناصر الموشن الجرافيكي:
+​التحويل (Morphing): هذا هو جوهر الفيديو؛ دائرة صغيرة تتمدد وتتغير مساراتها (Path Animation) لتصبح مربعاً أو بطاقة معلومات مستطيلة بمرونة بالغة. لا توجد زوايا حادة، كل الأشكال تمتلك زوايا مستديرة (Rounded Corners).
+​طريقة دخول وخروج العناصر: دخول مبهر ومفاجئ. كل عنصر جديد يظهر من العدم وينمو ليكتسب حجمه.
+​أسلوب الـ Bounce والـ Overshoot والـ Scale: العناصر لا تظهر وتتوقف عند حجمها الحقيقي (100%)، بل تقفز لتصل إلى حجم (110%) في جزء من الثانية (Overshoot)، ثم ترتد بمرونة لينة لتستقر عند (100%) (Bounce).
+​واجهات المستخدم: البطاقات، أشرطة التحميل (Sliders)، وأزرار التفعيل (Toggles) تتمتع بحدود دقيقة (Strokes) وتفاصيل متقنة تعكس واجهات التطبيقات الحديثة.
+​الأسهم والخطوط والدوائر: ترسم نفسها ذاتياً باستخدام أسلوب (Trim Paths). الخطوط تملك نهايات مستديرة (Round Caps)، والدوائر تنفجر للخارج كنبضات (Ripple effect).
+​تحليل حركة الشخصية وتفاعلها:
+​طريقة تفاعل الشخصية: لا توجد شخصيات بشرية فعلية؛ "الشخصية" هنا تمثلها أيقونة المستخدم (Avatar) أو مؤشر الفأرة (Cursor).
+​حركة المؤشر: يتحرك المؤشر في منحنيات طبيعية (Arcs) وليس في خطوط مستقيمة، ليحاكي حركة اليد البشرية. عند النقر، يتقلص المؤشر بنسبة 5% للداخل ويزداد توهج العنصر الذي تم النقر عليه، مع ظهور دائرة ارتدادية (Ripple) للتأكيد البصري.
+​مكملات العنصر: عند تحول شكل أو الضغط على زر، تظهر أشكال هندسية صغيرة جداً (نقاط، نجوم صغيرة، أو خطوط قصيرة) تتناثر حوله كنوع من الانفجار الزخرفي (Burst Accents) وتتلاشى فوراً.
+​تحليل المؤثرات الصوتية والبصرية:
+​التوقيت: المؤثرات البصرية والصوتية متزامنة بدقة مستوى الإطار (Frame-Accurate). تبدأ المؤثرات قبل ذروة الحركة بإطارين لدعم الإحساس بالقوة.
+​نوع المؤثرات الصوتية (SFX): أصوات حركة هواء خفيفة وناعمة (Soft Whooshes/Swooshes) مع تحرك الكاميرا وتمدد الأشكال. أصوات نقر زجاجية أو بلاستيكية مكتومة ولطيفة (Soft Pops / UI Clicks) عند التفاعل مع الأزرار أو ظهور النصوص المكتوبة.
+​متطلبات القص بين المشاهد: يجب أن يكون القص غير مرئي. ينتهي المشهد الأول بعنصر يغطي الشاشة، ويبدأ المشهد الثاني من نفس العنصر الذي يتشكل ليصبح واجهة المشهد الجديد.
+​«دليل الستايل الكامل جاهز للدراجة داخل أمر الوليد»
+​(هذا الوصف التفصيلي الدقيق مصمم لنسخه وإدراجه مباشرة داخل أوامر الذكاء الاصطناعي لتوليد أو تعديل الفيديو لضمان تطبيق نفس النمط البصري والحركي بدقة متناهية)
+​"Generate a highly dynamic, top-tier motion graphics video strictly utilizing a Modern UI Morphing and Neumorphism flat design style. The pacing must be incredibly snappy: rapid energetic bursts of element entries followed by extreme ease-out smooth resting periods (6-7 visual actions per 10 seconds). The color palette consists of deep, noise-free dark background colors (like solid rich charcoal or midnight blue) with completely flat lighting, accented by highly vibrant, high-saturation UI elements (electric blue, neon purple) and stark white typography.
+​Typography must be modern, bold Sans-serif (like Inter or Montserrat) with extreme weight contrast between massive bold headers and thin subtle body text. Text must animate in using vertical mask reveals with a cascading stagger delay between lines.
+​All shapes must be perfect vectors with significantly rounded corners. Apply soft, wide, and low-opacity drop shadows to all UI cards and buttons to make them appear floating with subtle depth. The camera must be 2.5D isometric with continuous, almost imperceptible slow Z-axis push-ins, interrupted by fast, buttery-smooth lateral pans that follow the UI flow.
+​Transitions must strictly be seamless path morphing (e.g., a perfect circle organically stretching and reshaping into a rectangular UI card) and shape wipe match-cuts; absolutely no hard cuts. All element entries and scaling animations must utilize prominent overshoot and bounce easing physics (scaling rapidly to 110% before smoothly resting at 100%).
+​Include precise UI accessories: loading sliders, toggles, trim-path rounded lines, and burst accents (tiny dots/lines scattering upon button clicks). Character interaction should be represented by a sleek digital mouse cursor moving in natural bezier arcs, shrinking slightly upon clicking, accompanied by a subtle ripple effect. Ensure the entire visual rhythm feels flawlessly engineered, highly polished, vector-clean, and flows continuously as a single seamless one-shot illusion."
