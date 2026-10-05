@@ -35,12 +35,20 @@ class IpeRenderer(
     private val ctx: Context,
     plan: Plan,
     sources: Map<String, SourceCard>,
-    private val w: Int,
-    private val h: Int,
+    private val opts: ExportOptions,
+    private val outW: Int,
+    private val outH: Int,
 ) {
-    private val parchment = 0xFFF4F1EA.toInt()
-    private val ink = 0xFF1A1A1A.toInt()
-    private val yellow = 0xFFFFE600.toInt()
+    // The scene is laid out on a fixed 720x1280 canvas and scaled to the output size.
+    private val w = 720
+    private val h = 1280
+    private val scale = outW / 720f
+    private val bgPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+
+    private val theme = opts.paper
+    private val parchment = theme.bg
+    private val ink = theme.ink
+    private val yellow = opts.highlight.argb
 
     private val titleFace = face("fonts/Tajawal-Bold.ttf", Typeface.DEFAULT_BOLD)
     private val bodyFace = face("fonts/Amiri-Regular.ttf", Typeface.SERIF)
@@ -53,11 +61,11 @@ class IpeRenderer(
     }
     private val paperFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = 0xFFFBF9F3.toInt()
+        color = theme.card
     }
     private val coverFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = 0xFFE9E3D3.toInt()
+        color = theme.cover
     }
     private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -101,14 +109,23 @@ class IpeRenderer(
     // ---------------------------------------------------------------- drawing
 
     fun draw(c: Canvas, t: Double) {
-        c.drawBitmap(background, 0f, 0f, null)
-        val v = activeVisual(t) ?: return
+        c.save()
+        c.scale(scale, scale)
+        c.drawBitmap(background, 0f, 0f, bgPaint)
+        val v = activeVisual(t)
+        if (v != null) drawScene(c, v, t)
+        c.restore()
+    }
+
+    private fun drawScene(c: Canvas, v: Visual, t: Double) {
         val local = (t - v.scene.start).toFloat()
         val dur = max(0.1f, (v.scene.end - v.scene.start).toFloat())
         val hi = (v.scene.highlightAt - v.scene.start).toFloat()
         val ci = (v.scene.conclusionAt - v.scene.start).toFloat()
 
-        val zoom = 1f + 0.04f * (local / dur).coerceIn(0f, 1f) + 0.12f * focusAmount(local, hi)
+        val zoom = if (opts.zoom) {
+            1f + 0.04f * (local / dur).coerceIn(0f, 1f) + 0.12f * focusAmount(local, hi)
+        } else 1f
         val hasHi = v.hiRects.isNotEmpty()
         val px = if (hasHi) v.quoteX + v.hiRects[0].centerX() else w / 2f
         val py = if (hasHi) v.quoteY + v.hiRects[0].centerY() else h / 2f
