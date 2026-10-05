@@ -8,7 +8,13 @@ import android.provider.OpenableColumns
 import java.io.File
 import java.util.UUID
 
-fun copyAudio(ctx: Context, uri: Uri): PickedAudio {
+/** Deletes the audio and cover images that belong to a project (called when it is removed). */
+fun deleteProjectFiles(ctx: Context, project: Project) {
+    ctx.filesDir.listFiles { _, n -> n.startsWith("audio_${project.id}.") }?.forEach { it.delete() }
+    for (s in project.sources) s.imagePath?.let { File(it).delete() }
+}
+
+fun copyAudio(ctx: Context, uri: Uri, projectId: String): PickedAudio {
     val cr = ctx.contentResolver
     var name = "audio"
     cr.query(uri, null, null, null, null)?.use { c ->
@@ -22,7 +28,8 @@ fun copyAudio(ctx: Context, uri: Uri): PickedAudio {
         else if (mime.contains("ogg")) "ogg"
         else "mp3"
     }
-    val f = File(ctx.cacheDir, "voice.$ext")
+    ctx.filesDir.listFiles { _, n -> n.startsWith("audio_$projectId.") }?.forEach { it.delete() }
+    val f = File(ctx.filesDir, "audio_$projectId.$ext")
     cr.openInputStream(uri)?.use { input -> f.outputStream().use { out -> input.copyTo(out) } }
     return PickedAudio(f, name, mime)
 }
