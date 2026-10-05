@@ -104,6 +104,30 @@ Output format, nothing else (no prose, no markdown):
         return out
     }
 
+    /**
+     * No keys needed: builds the plan from the timings the user typed on each source card.
+     * Missing start times are spread evenly; missing highlight/conclusion times get sensible defaults.
+     */
+    fun manualPlan(sources: List<SourceCard>, duration: Double): Plan {
+        if (sources.isEmpty()) return Plan(emptyList())
+        val slice = duration / sources.size
+        var prev = 0.0
+        val raw = sources.mapIndexed { i, s ->
+            val start = s.startSec ?: (if (i == 0) 0.0 else prev + slice)
+            prev = start
+            Scene(
+                sourceId = s.id,
+                start = start,
+                end = 0.0,
+                highlightPhrase = s.highlightPhrase,
+                highlightAt = s.highlightSec ?: 0.0,
+                conclusion = s.conclusion,
+                conclusionAt = s.conclusionSec ?: 0.0,
+            )
+        }
+        return sanitize(raw, sources, duration)
+    }
+
     private fun sanitize(scenes: List<Scene>, sources: List<SourceCard>, duration: Double): Plan {
         val byId = sources.associateBy { it.id }
         val sorted = scenes.filter { byId.containsKey(it.sourceId) }.sortedBy { it.start }
@@ -125,7 +149,7 @@ Output format, nothing else (no prose, no markdown):
                 firstWords(src.quote, 5)
             }
             val hiAt = if (s.highlightAt in (s.start + 0.5)..(end - 0.5)) s.highlightAt else min(s.start + 1.2, end - 0.5)
-            val concAt = if (s.conclusionAt in (hiAt + 0.5)..(end - 0.3)) s.conclusionAt else max(hiAt + 1.0, end - 2.0)
+            val concAt = if (s.conclusionAt in (hiAt + 0.5)..(end - 0.3)) s.conclusionAt else max(hiAt + 1.0, min(end - 2.0, hiAt + 4.0))
             result.add(
                 s.copy(
                     end = end,

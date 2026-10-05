@@ -123,12 +123,19 @@ fun App() {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(s.title.ifBlank { "(بدون عنوان)" }, style = MaterialTheme.typography.titleSmall)
-                                Text(listOf(s.author, s.location).filter { it.isNotBlank() }.joinToString(" — "))
+                                Text(
+                                    listOf(
+                                        s.author,
+                                        s.location,
+                                        s.startSec?.let { "يبدأ عند " + formatTime(it) } ?: "",
+                                    ).filter { it.isNotBlank() }.joinToString(" — ")
+                                )
                                 val missing = buildList {
                                     if (s.author.isBlank()) add("المؤلف")
                                     if (s.publisher.isBlank()) add("الناشر والطبعة")
                                     if (s.location.isBlank()) add("المجلد/الصفحة")
                                     if (s.quote.isBlank()) add("النص المقتبس")
+                                    if (settings.openAiKey.isBlank() && s.startSec == null) add("وقت البداية")
                                 }
                                 if (missing.isNotEmpty()) {
                                     Text("ناقص: " + missing.joinToString("، "), color = Color(0xFFFFB74D))
@@ -260,6 +267,11 @@ fun SourceDialog(initial: SourceCard?, onDismiss: () -> Unit, onSave: (SourceCar
     var quote by remember { mutableStateOf(initial?.quote ?: "") }
     var translation by remember { mutableStateOf(initial?.translation ?: "") }
     var imagePath by remember { mutableStateOf(initial?.imagePath) }
+    var startText by remember { mutableStateOf(initial?.startSec?.let { formatTime(it) } ?: "") }
+    var phrase by remember { mutableStateOf(initial?.highlightPhrase ?: "") }
+    var hiText by remember { mutableStateOf(initial?.highlightSec?.let { formatTime(it) } ?: "") }
+    var conclusion by remember { mutableStateOf(initial?.conclusion ?: "") }
+    var concText by remember { mutableStateOf(initial?.conclusionSec?.let { formatTime(it) } ?: "") }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) imagePath = copyImage(ctx, uri)
@@ -285,6 +297,32 @@ fun SourceDialog(initial: SourceCard?, onDismiss: () -> Unit, onSave: (SourceCar
                     value = translation, onValueChange = { translation = it },
                     label = { Text("التفريغ / الترجمة (اختياري)") }, minLines = 2,
                 )
+                Text("التوقيت (للعمل بدون مفاتيح)", style = MaterialTheme.typography.titleSmall)
+                OutlinedTextField(
+                    value = startText, onValueChange = { startText = it },
+                    label = { Text("وقت بداية الكلام عن هذا المصدر (مثال 0:35)") }, singleLine = true,
+                )
+                OutlinedTextField(
+                    value = phrase, onValueChange = { phrase = it },
+                    label = { Text("العبارة المراد تظليلها (منسوخة حرفياً من النص)") },
+                    supportingText = {
+                        if (phrase.isNotBlank() && !quote.contains(phrase.trim())) {
+                            Text("هذه العبارة غير موجودة في النص المقتبس")
+                        }
+                    },
+                )
+                OutlinedTextField(
+                    value = hiText, onValueChange = { hiText = it },
+                    label = { Text("وقت التظليل (اختياري)") }, singleLine = true,
+                )
+                OutlinedTextField(
+                    value = conclusion, onValueChange = { conclusion = it },
+                    label = { Text("الخلاصة بخط اليد (اختياري)") },
+                )
+                OutlinedTextField(
+                    value = concText, onValueChange = { concText = it },
+                    label = { Text("وقت ظهور الخلاصة (اختياري)") }, singleLine = true,
+                )
                 OutlinedButton(onClick = { imagePicker.launch("image/*") }) {
                     Text(if (imagePath == null) "اختيار صورة الغلاف" else "تغيير صورة الغلاف")
                 }
@@ -298,6 +336,11 @@ fun SourceDialog(initial: SourceCard?, onDismiss: () -> Unit, onSave: (SourceCar
                         author = author.trim(), title = title.trim(), publisher = publisher.trim(),
                         location = location.trim(), quote = quote.trim(), translation = translation.trim(),
                         imagePath = imagePath,
+                        startSec = parseTime(startText),
+                        highlightPhrase = phrase.trim(),
+                        highlightSec = parseTime(hiText),
+                        conclusion = conclusion.trim(),
+                        conclusionSec = parseTime(concText),
                     )
                 )
             }) { Text("حفظ") }

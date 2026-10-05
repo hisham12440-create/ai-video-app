@@ -15,27 +15,32 @@ class Pipeline(private val ctx: Context) {
         sources: List<SourceCard>,
         report: (String, Float) -> Unit,
     ): File = withContext(Dispatchers.Default) {
-        require(settings.openAiKey.isNotBlank()) { "أدخل مفتاح OpenAI من الإعدادات (لتفريغ الصوت وتوقيت الكلمات)." }
         require(sources.isNotEmpty()) { "أضف مصدراً واحداً على الأقل." }
-        if (audio.file.length() > 25L * 1024 * 1024) {
-            throw IOException("حجم الملف الصوتي أكبر من 25 ميغابايت. اختصره أو اضغطه ثم أعد المحاولة.")
-        }
+        // Manual mode (no keys): the timings typed on the source cards drive the edit.
+        val manual = settings.openAiKey.isBlank() || sources.any { it.startSec != null }
 
-        report("جاري تفريغ الصوت وتوقيت الكلمات…", 0.05f)
-        val words = Transcriber.transcribe(settings.openAiKey, audio.file, audio.mime)
-
-        report("جاري تجهيز الصوت…", 0.2f)
+        report("جاري تجهيز الصوت…", 0.1f)
         val pcm = AudioTools.decodeToMono(audio.file.path)
         AudioTools.normalize(pcm.samples)
         val sr = pcm.sampleRate
         val duration = pcm.samples.size / sr.toDouble()
 
-        val usedClaude = settings.anthropicKey.isNotBlank()
-        report(
-            if (usedClaude) "المخرج يكتب خطة المونتاج…" else "توزيع المصادر تلقائياً (لا يوجد مفتاح Claude)…",
-            0.3f,
-        )
-        val plan = Director.plan(settings, words, sources, duration)
+        val plan = if (manual) {
+            report("بناء الخطة من التوقيتات التي أدخلتها…", 0.3f)
+            Director.manualPlan(sources, duration)
+        } else {
+            if (audio.file.length() > 25L * 1024 * 1024) {
+                throw IOException("حجم الملف الصوتي أكبر من 25 ميغابايت. اختصره أو اضغطه ثم أعد المحاولة.")
+            }
+            report("جاري تفريغ الصوت وتوقيت الكلمات…", 0.15f)
+            val words = Transcriber.transcribe(settings.openAiKey, audio.file, audio.mime)
+            report(
+                if (settings.anthropicKey.isNotBlank()) "المخرج يكتب خطة المونتاج…"
+                else "توزيع المصادر تلقائياً (لا يوجد مفتاح Claude)…",
+                0.3f,
+            )
+            Director.plan(settings, words, sources, duration)
+        }
         if (plan.scenes.isEmpty()) throw IOException("لم يتم إنشاء أي مشهد.")
 
         report("جاري مزج المؤثرات الصوتية…", 0.35f)

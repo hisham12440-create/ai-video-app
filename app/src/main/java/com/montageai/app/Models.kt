@@ -13,6 +13,12 @@ data class SourceCard(
     val quote: String = "",
     val translation: String = "",
     val imagePath: String? = null,
+    // Manual timing (used when no transcription key is set, or when the user fills it in)
+    val startSec: Double? = null,
+    val highlightPhrase: String = "",
+    val highlightSec: Double? = null,
+    val conclusion: String = "",
+    val conclusionSec: Double? = null,
 )
 
 data class Scene(

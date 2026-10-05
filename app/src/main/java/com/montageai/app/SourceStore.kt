@@ -24,6 +24,11 @@ object SourceStore {
                     quote = o.optString("quote"),
                     translation = o.optString("translation"),
                     imagePath = if (o.isNull("imagePath")) null else o.optString("imagePath"),
+                    startSec = if (o.isNull("startSec")) null else o.optDouble("startSec"),
+                    highlightPhrase = o.optString("highlightPhrase"),
+                    highlightSec = if (o.isNull("highlightSec")) null else o.optDouble("highlightSec"),
+                    conclusion = o.optString("conclusion"),
+                    conclusionSec = if (o.isNull("conclusionSec")) null else o.optDouble("conclusionSec"),
                 )
             }
         } catch (e: Exception) {
@@ -44,6 +49,11 @@ object SourceStore {
                     .put("quote", s.quote)
                     .put("translation", s.translation)
                     .put("imagePath", s.imagePath ?: JSONObject.NULL)
+                    .put("startSec", s.startSec ?: JSONObject.NULL)
+                    .put("highlightPhrase", s.highlightPhrase)
+                    .put("highlightSec", s.highlightSec ?: JSONObject.NULL)
+                    .put("conclusion", s.conclusion)
+                    .put("conclusionSec", s.conclusionSec ?: JSONObject.NULL)
             )
         }
         file(ctx).writeText(arr.toString())
