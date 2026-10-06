@@ -44,9 +44,18 @@ jobs:
           else
             echo "::error title=APK::app-debug.apk was not produced"
           fi
-          CACHE=$(find app/.cxx -name CMakeCache.txt 2>/dev/null | head -1)
+          CACHE=$(find app -name CMakeCache.txt 2>/dev/null | head -1)
           if [ -n "$CACHE" ]; then
-            echo "::notice title=Native build::$(grep -E 'CMAKE_BUILD_TYPE:|ANDROID_ABI:|CMAKE_ANDROID_NDK:' "$CACHE" | tr '\n' ' ')"
+            echo "::notice title=Native build::$CACHE $(grep -E '^CMAKE_BUILD_TYPE:|^ANDROID_ABI:|^CMAKE_C_FLAGS_RELEASE:' "$CACHE" | tr '\n' ' ')"
+          else
+            echo "::warning title=Native build::no CMakeCache.txt found under app/"
+          fi
+          CC=$(find app -name 'compile_commands.json*' 2>/dev/null | head -1)
+          if [ -n "$CC" ]; then
+            O3=$(zcat -f "$CC" | grep -c -- ' -O3' || true)
+            O0=$(zcat -f "$CC" | grep -c -- ' -O0' || true)
+            GGML=$(zcat -f "$CC" | grep -E 'ggml-cpu/(quants|ops)\.c' | head -1 | grep -oE ' -O[0-3s]| -march=[^ ]*| -mcpu=[^ ]*| -DNDEBUG' | tr '\n' ' ')
+            echo "::notice title=Compile flags::commands with -O3: $O3, with -O0: $O0; ggml flags: $GGML"
           fi
           python3 - <<'PY'
           import glob
