@@ -7,7 +7,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -30,15 +28,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,8 +47,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -66,41 +63,26 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
-import kotlin.math.min
-
-private val ColorStart = Clay.Terracotta
-private val ColorHighlight = Color(0xFFE5B800)
-private val ColorConclusion = Color(0xFF3E8E5A)
-
-private class Marker(val sec: Double, val kind: Int, val selected: Boolean)
-
-private fun markerColor(kind: Int): Color = when (kind) {
-    0 -> ColorStart
-    1 -> ColorHighlight
-    else -> ColorConclusion
-}
-
-private fun round1(v: Double): Double = Math.round(v.coerceAtLeast(0.0) * 10.0) / 10.0
 
 /**
- * The editing workspace: live preview of the frame at the playhead, waveform timeline with the
- * markers of every source, tap-to-mark timing, nudging, phrase picker, reorder, undo and auto tools.
+ * The editing workspace: live preview of the plan Pipeline will render, waveform timeline with the
+ * cut points, transport controls, automatic transcription, and the list of images (reorder, delete,
+ * per-image motion/transition/start overrides).
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(
     project: Project,
     auto: AutoState,
     actions: AutoActions,
     onBack: () -> Unit,
-    onSourcesChange: (List<SourceCard>) -> Unit,
+    onProjectChange: (Project) -> Unit,
 ) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
@@ -126,62 +108,32 @@ fun EditorScreen(
         else -> 60.0
     }
 
-    var selectedId by remember { mutableStateOf(project.sources.firstOrNull()?.id) }
-    var editing by remember { mutableStateOf<SourceCard?>(null) }
-    val undo = remember { mutableStateListOf<List<SourceCard>>() }
+    var editing by remember { mutableStateOf<MediaItem?>(null) }
 
-    fun commit(new: List<SourceCard>) {
-        undo.add(project.sources)
-        if (undo.size > 30) undo.removeAt(0)
-        onSourcesChange(new)
-    }
-
-    // ---- automatic timing from the transcript ----
+    // ---- automatic transcription (feeds the planner; no separate "matching" step) ----
     val transcript = auto.words[project.id]
-    var matchMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(project.id, project.audioPath) { auto.loadTranscript(ctx, project) }
 
-    fun runMatch(onlyEmpty: Boolean) {
-        val w = auto.words[project.id] ?: return
-        val r = Matcher.match(project.sources, w, onlyEmpty)
-        commit(r.sources)
-        matchMessage = buildString {
-            append("وجدتُ ${r.matched} من ${r.total} مصادر في الكلام.")
-            if (r.missing.isNotEmpty()) append(" لم أجد: " + r.missing.joinToString("، ") + ". علّمها يدوياً.")
+    // ---- the actual edit plan the exported video will follow ----
+    var plan by remember { mutableStateOf(EditPlan.EMPTY) }
+    LaunchedEffect(project.media, project.script, project.options, transcript, duration) {
+        plan = if (project.media.isEmpty()) {
+            EditPlan.EMPTY
+        } else {
+            withContext(Dispatchers.Default) { Planner.plan(project, transcript, duration) }
         }
     }
 
-    var handledTick by remember { mutableIntStateOf(auto.doneTick) }
-    LaunchedEffect(auto.doneTick) {
-        if (auto.doneTick != handledTick) {
-            handledTick = auto.doneTick
-            if (auto.doneProject == project.id) runMatch(onlyEmpty = true)
-        }
-    }
-
-    fun setTime(id: String, kind: Int, sec: Double?) {
-        val v = sec?.let { round1(it) }
-        commit(
-            project.sources.map { s ->
-                if (s.id != id) s else when (kind) {
-                    0 -> s.copy(startSec = v)
-                    1 -> s.copy(highlightSec = v)
-                    else -> s.copy(conclusionSec = v)
-                }
-            }
-        )
-    }
-
-    // ---- live preview (renders the same scene the exported video will show) ----
-    var renderer by remember { mutableStateOf<IpeRenderer?>(null) }
-    LaunchedEffect(project.sources, project.options, duration) {
-        renderer = if (project.sources.isEmpty()) {
+    // ---- live preview (renders the same scene the exported video will show, at a small size) ----
+    val ratio = project.options.aspect.width.toFloat() / project.options.aspect.height.toFloat()
+    val previewH = 420
+    val previewW = max(1, (previewH * ratio).toInt())
+    var renderer by remember { mutableStateOf<Renderer?>(null) }
+    LaunchedEffect(project, plan) {
+        renderer = if (plan.shots.isEmpty()) {
             null
         } else {
-            withContext(Dispatchers.Default) {
-                val plan = Director.manualPlan(project.sources, duration)
-                IpeRenderer(ctx, plan, project.sources.associateBy { it.id }, project.options, 360, 640)
-            }
+            withContext(Dispatchers.Default) { Renderer(ctx, project, plan, previewW, previewH) }
         }
     }
     var frame by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -191,21 +143,14 @@ fun EditorScreen(
         if (r != null) {
             val t = bucket * 0.08
             frame = withContext(Dispatchers.Default) {
-                val bmp = Bitmap.createBitmap(360, 640, Bitmap.Config.ARGB_8888)
+                val bmp = Bitmap.createBitmap(previewW, previewH, Bitmap.Config.ARGB_8888)
                 r.draw(AndroidCanvas(bmp), t)
                 bmp.asImageBitmap()
             }
         }
     }
 
-    val markers = buildList {
-        for (s in project.sources) {
-            val sel = s.id == selectedId
-            s.startSec?.let { add(Marker(it, 0, sel)) }
-            s.highlightSec?.let { add(Marker(it, 1, sel)) }
-            s.conclusionSec?.let { add(Marker(it, 2, sel)) }
-        }
-    }
+    val cutMarkers = plan.shots.map { it.start }
 
     Scaffold(
         containerColor = cs.background,
@@ -216,15 +161,6 @@ fun EditorScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
-                },
-                actions = {
-                    TextButton(
-                        enabled = undo.isNotEmpty(),
-                        onClick = {
-                            val last = undo.removeAt(undo.size - 1)
-                            onSourcesChange(last)
-                        },
-                    ) { Text("تراجع") }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = cs.background),
             )
@@ -239,7 +175,7 @@ fun EditorScreen(
         ) {
             if (player.failed) {
                 Text(
-                    "لا يوجد تسجيل صوتي صالح. اختر الصوت من الشاشة الرئيسية لتتمكن من التشغيل والتعليم.",
+                    "لا يوجد تسجيل صوتي صالح. اختر الصوت من الشاشة الرئيسية لتتمكن من التشغيل.",
                     color = Clay.Warning,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -249,11 +185,11 @@ fun EditorScreen(
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Box(
                     Modifier
-                        .height(400.dp)
-                        .aspectRatio(9f / 16f)
+                        .height(380.dp)
+                        .aspectRatio(ratio)
                         .clip(RoundedCornerShape(16.dp))
                         .border(1.dp, cs.outline, RoundedCornerShape(16.dp))
-                        .background(cs.surfaceVariant),
+                        .background(Color.Black),
                     contentAlignment = Alignment.Center,
                 ) {
                     val f = frame
@@ -261,9 +197,9 @@ fun EditorScreen(
                         Image(bitmap = f, contentDescription = "معاينة الإطار", modifier = Modifier.fillMaxWidth())
                     } else {
                         Text(
-                            if (project.sources.isEmpty()) "أضف مصدراً لتظهر المعاينة" else "جاري تجهيز المعاينة…",
+                            if (project.media.isEmpty()) "أضف صوراً لتظهر المعاينة" else "جاري تجهيز المعاينة…",
                             style = MaterialTheme.typography.bodySmall,
-                            color = cs.onSurfaceVariant,
+                            color = Color.White.copy(alpha = 0.7f),
                         )
                     }
                 }
@@ -276,7 +212,7 @@ fun EditorScreen(
                         wave = waveSnapshot,
                         duration = duration,
                         position = player.positionSec,
-                        markers = markers,
+                        cuts = cutMarkers,
                         onSeek = { sec -> player.seekTo((sec * 1000).toInt()) },
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -294,7 +230,8 @@ fun EditorScreen(
                         Surface(
                             shape = CircleShape,
                             color = cs.primary,
-                            modifier = Modifier.size(54.dp).clip(CircleShape).clickable { player.toggle() },
+                            modifier = Modifier.size(54.dp).clip(CircleShape)
+                                .pointerInput(Unit) { detectTapGestures(onTap = { player.toggle() }) },
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
@@ -311,21 +248,13 @@ fun EditorScreen(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                LegendDot(ColorStart, "بداية المصدر")
-                LegendDot(ColorHighlight, "تظليل")
-                LegendDot(ColorConclusion, "خلاصة")
-            }
-
-            AutoCard(
-                auto = auto,
-                project = project,
-                hasTranscript = transcript != null,
-                matchMessage = matchMessage,
-                actions = actions,
-                onMatchEmpty = { runMatch(onlyEmpty = true) },
-                onMatchAll = { runMatch(onlyEmpty = false) },
+            Text(
+                if (plan.shots.isEmpty()) "لا توجد لقطات بعد." else "${plan.shots.size} لقطة · خط أحمر = نقطة قطع",
+                style = MaterialTheme.typography.bodySmall,
+                color = cs.onSurfaceVariant,
             )
+
+            AutoCard(auto = auto, project = project, hasTranscript = transcript != null, actions = actions)
             if (transcript != null && transcript.isNotEmpty()) {
                 TranscriptCard(
                     words = transcript,
@@ -334,70 +263,28 @@ fun EditorScreen(
                 )
             }
 
-            // Tools
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = cs.surface),
-                border = BorderStroke(1.dp, cs.outlineVariant),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("أدوات سريعة", style = MaterialTheme.typography.titleMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        OutlinedButton(onClick = { commit(Director.spreadEvenly(project.sources, duration)) }) {
-                            Text("توزيع متساوٍ")
-                        }
-                        OutlinedButton(onClick = {
-                            commit(project.sources.sortedBy { it.startSec ?: Double.MAX_VALUE })
-                        }) { Text("ترتيب حسب الوقت") }
-                        OutlinedButton(onClick = {
-                            commit(
-                                project.sources.map {
-                                    it.copy(startSec = null, highlightSec = null, conclusionSec = null)
-                                }
-                            )
-                        }) { Text("مسح كل التوقيتات") }
-                    }
-                    Text(
-                        "اختر مصدراً أدناه، شغّل الصوت، واضغط «علّم هنا» عند اللحظة المطلوبة.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cs.onSurfaceVariant,
-                    )
-                }
+            Text("الصور (${project.media.size})", style = MaterialTheme.typography.titleMedium)
+            if (project.media.isEmpty()) {
+                Text("لا توجد صور بعد. أضفها من الشاشة الرئيسية.", color = cs.onSurfaceVariant)
             }
-
-            Text("المصادر والتوقيت", style = MaterialTheme.typography.titleMedium)
-            if (project.sources.isEmpty()) {
-                Text("لا توجد مصادر بعد. أضفها من الشاشة الرئيسية.", color = cs.onSurfaceVariant)
-            }
-            project.sources.forEachIndexed { index, s ->
-                SourceEditCard(
+            project.media.forEachIndexed { index, m ->
+                MediaRow(
                     index = index,
-                    s = s,
-                    selected = s.id == selectedId,
-                    playheadSec = player.positionSec,
+                    item = m,
                     canUp = index > 0,
-                    canDown = index < project.sources.size - 1,
-                    onSelect = { selectedId = s.id },
-                    onSeekTo = { sec -> player.seekTo((sec * 1000).toInt()) },
-                    onSet = { kind, sec -> setTime(s.id, kind, sec) },
-                    onPhrase = { phrase ->
-                        commit(project.sources.map { if (it.id == s.id) it.copy(highlightPhrase = phrase) else it })
-                    },
+                    canDown = index < project.media.size - 1,
                     onMove = { dir ->
-                        val list = project.sources.toMutableList()
+                        val list = project.media.toMutableList()
                         val j = index + dir
                         if (j in list.indices) {
                             val tmp = list[index]
                             list[index] = list[j]
                             list[j] = tmp
-                            commit(list)
+                            onProjectChange(project.copy(media = list))
                         }
                     },
-                    onEdit = { editing = s },
+                    onDelete = { onProjectChange(project.copy(media = project.media.filter { it.id != m.id })) },
+                    onEdit = { editing = m },
                 )
             }
             Spacer(Modifier.height(24.dp))
@@ -405,23 +292,15 @@ fun EditorScreen(
     }
 
     editing?.let { current ->
-        SourceDialog(
-            initial = current,
+        MediaOptionsDialog(
+            item = current,
+            playheadSec = player.positionSec,
             onDismiss = { editing = null },
-            onSave = { card ->
-                commit(project.sources.map { if (it.id == card.id) card else it })
+            onSave = { updated ->
+                onProjectChange(project.copy(media = project.media.map { if (it.id == updated.id) updated else it }))
                 editing = null
             },
         )
-    }
-}
-
-@Composable
-private fun LegendDot(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -430,13 +309,14 @@ private fun Timeline(
     wave: WaveData?,
     duration: Double,
     position: Double,
-    markers: List<Marker>,
+    cuts: List<Double>,
     onSeek: (Double) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val barColor = cs.onSurfaceVariant.copy(alpha = 0.4f)
     val playedColor = cs.primary
     val playheadColor = cs.onSurface
+    val cutColor = Color(0xFFB3412E)
     val seek by rememberUpdatedState(onSeek)
 
     Canvas(
@@ -476,235 +356,68 @@ private fun Timeline(
                 )
             }
         } else {
-            drawLine(
-                color = barColor,
-                start = Offset(0f, cy),
-                end = Offset(size.width, cy),
-                strokeWidth = 3f,
-            )
+            drawLine(color = barColor, start = Offset(0f, cy), end = Offset(size.width, cy), strokeWidth = 3f)
         }
-        for (pass in 0..1) {
-            for (m in markers) {
-                if ((pass == 1) != m.selected) continue
-                val x = (m.sec / duration).toFloat().coerceIn(0f, 1f) * size.width
-                val c = markerColor(m.kind)
-                drawLine(
-                    color = c,
-                    start = Offset(x, 0f),
-                    end = Offset(x, size.height),
-                    strokeWidth = if (m.selected) 5f else 2.5f,
-                )
-                drawCircle(color = c, radius = if (m.selected) 10f else 6f, center = Offset(x, 12f))
-            }
+        for (cutT in cuts) {
+            val x = (cutT / duration).toFloat().coerceIn(0f, 1f) * size.width
+            drawLine(color = cutColor, start = Offset(x, 0f), end = Offset(x, size.height), strokeWidth = 2f)
         }
         val px = progress * size.width
-        drawLine(
-            color = playheadColor,
-            start = Offset(px, 0f),
-            end = Offset(px, size.height),
-            strokeWidth = 3f,
-        )
+        drawLine(color = playheadColor, start = Offset(px, 0f), end = Offset(px, size.height), strokeWidth = 3f)
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun SourceEditCard(
-    index: Int,
-    s: SourceCard,
-    selected: Boolean,
+private fun MediaOptionsDialog(
+    item: MediaItem,
     playheadSec: Double,
-    canUp: Boolean,
-    canDown: Boolean,
-    onSelect: () -> Unit,
-    onSeekTo: (Double) -> Unit,
-    onSet: (kind: Int, sec: Double?) -> Unit,
-    onPhrase: (String) -> Unit,
-    onMove: (Int) -> Unit,
-    onEdit: () -> Unit,
+    onDismiss: () -> Unit,
+    onSave: (MediaItem) -> Unit,
 ) {
-    val cs = MaterialTheme.colorScheme
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) cs.primaryContainer.copy(alpha = 0.45f) else cs.surface,
-        ),
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) cs.primary else cs.outlineVariant),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onSelect() },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier.size(28.dp).clip(CircleShape).background(cs.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("${index + 1}", style = MaterialTheme.typography.labelLarge, color = cs.onPrimaryContainer)
-                }
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    s.title.ifBlank { "(بدون عنوان)" },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(enabled = canUp, onClick = { onMove(-1) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text("↑")
-                }
-                TextButton(enabled = canDown, onClick = { onMove(1) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text("↓")
-                }
-            }
+    var motion by remember(item.id) { mutableStateOf(item.motion) }
+    var transition by remember(item.id) { mutableStateOf(item.transition) }
+    var startText by remember(item.id) { mutableStateOf(item.startSec?.let { formatTime(it) } ?: "") }
 
-            if (selected) {
-                TimeRow(
-                    label = "بداية الكلام عن المصدر",
-                    color = ColorStart,
-                    value = s.startSec,
-                    onSeek = { s.startSec?.let(onSeekTo) },
-                    onMark = { onSet(0, playheadSec) },
-                    onNudge = { d -> s.startSec?.let { v -> onSet(0, v + d).also { onSeekTo(round1(v + d)) } } },
-                    onClear = { onSet(0, null) },
-                )
-                TimeRow(
-                    label = "لحظة التظليل",
-                    color = ColorHighlight,
-                    value = s.highlightSec,
-                    onSeek = { s.highlightSec?.let(onSeekTo) },
-                    onMark = { onSet(1, playheadSec) },
-                    onNudge = { d -> s.highlightSec?.let { v -> onSet(1, v + d).also { onSeekTo(round1(v + d)) } } },
-                    onClear = { onSet(1, null) },
-                )
-                TimeRow(
-                    label = "ظهور الخلاصة",
-                    color = ColorConclusion,
-                    value = s.conclusionSec,
-                    note = if (s.conclusion.isBlank()) "لا توجد خلاصة. أضفها من «تعديل البيانات»." else null,
-                    onSeek = { s.conclusionSec?.let(onSeekTo) },
-                    onMark = { onSet(2, playheadSec) },
-                    onNudge = { d -> s.conclusionSec?.let { v -> onSet(2, v + d).also { onSeekTo(round1(v + d)) } } },
-                    onClear = { onSet(2, null) },
-                )
-
-                if (s.quote.isNotBlank()) {
-                    Text("العبارة المظللة", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "اضغط كلمة لتظليلها، ثم كلمة أخرى لتوسيع التظليل بينهما.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cs.onSurfaceVariant,
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("خيارات الصورة") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("وقت البداية (اختياري، فارغ = تلقائي)", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = startText,
+                        onValueChange = { startText = it },
+                        placeholder = { Text("مثال 0:35") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
                     )
-                    PhrasePicker(quote = s.quote, current = s.highlightPhrase, onPick = onPhrase)
-                    if (s.highlightPhrase.isNotBlank()) {
-                        TextButton(onClick = { onPhrase("") }) { Text("إلغاء التظليل") }
+                    TextButton(onClick = { startText = formatTime(playheadSec) }) { Text("علّم هنا") }
+                }
+
+                Text("الحركة", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = motion == null, onClick = { motion = null }, label = { Text("تلقائي") })
+                    for (m in Motion.values()) {
+                        FilterChip(selected = motion == m, onClick = { motion = m }, label = { Text(m.label) })
                     }
                 }
-                OutlinedButton(onClick = onEdit) { Text("تعديل البيانات") }
-            } else {
-                val summary = listOfNotNull(
-                    s.startSec?.let { "بداية " + formatTime(it) },
-                    s.highlightSec?.let { "تظليل " + formatTime(it) },
-                    s.conclusionSec?.let { "خلاصة " + formatTime(it) },
-                ).joinToString("  ·  ")
-                Text(
-                    summary.ifBlank { "بلا توقيت · اضغط للتحديد" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = cs.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
 
-@Composable
-private fun TimeRow(
-    label: String,
-    color: Color,
-    value: Double?,
-    note: String? = null,
-    onSeek: () -> Unit,
-    onMark: () -> Unit,
-    onNudge: (Double) -> Unit,
-    onClear: () -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    val tight = PaddingValues(horizontal = 8.dp)
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(color))
-            Spacer(Modifier.width(8.dp))
-            Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            Text(
-                if (value != null) formatTime(value) else "تلقائي",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = if (value != null) cs.primary else cs.onSurfaceVariant,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(enabled = value != null) { onSeek() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
-        }
-        if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            FilledTonalButton(onClick = onMark, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("علّم هنا") }
-            if (value != null) {
-                TextButton(onClick = { onNudge(-0.1) }, contentPadding = tight) { Text("‎-0.1") }
-                TextButton(onClick = { onNudge(0.1) }, contentPadding = tight) { Text("‎+0.1") }
-                TextButton(onClick = onClear, contentPadding = tight) { Text("مسح") }
-            }
-        }
-    }
-}
-
-/** Tap a word to highlight it, tap another to stretch the highlight to cover everything in between. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun PhrasePicker(quote: String, current: String, onPick: (String) -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val words = remember(quote) { Regex("\\S+").findAll(quote).map { it.range }.toList() }
-    var anchor by remember(quote) { mutableStateOf(-1) }
-    val sel: IntRange? = remember(quote, current) {
-        if (current.isBlank()) {
-            null
-        } else {
-            val idx = quote.indexOf(current)
-            if (idx < 0) {
-                null
-            } else {
-                val a = words.indexOfFirst { it.first >= idx }
-                val b = words.indexOfLast { it.last < idx + current.length }
-                if (a in 0..b) a..b else null
-            }
-        }
-    }
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        words.forEachIndexed { i, r ->
-            val on = sel != null && i in sel
-            Text(
-                quote.substring(r.first, r.last + 1),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (on) Color.Black else cs.onSurface,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (on) ColorHighlight.copy(alpha = 0.85f) else Color.Transparent)
-                    .clickable {
-                        if (anchor < 0) {
-                            anchor = i
-                            onPick(quote.substring(r.first, r.last + 1))
-                        } else {
-                            val a = min(anchor, i)
-                            val b = max(anchor, i)
-                            onPick(quote.substring(words[a].first, words[b].last + 1))
-                            anchor = -1
-                        }
+                Text("الانتقال (عند الدخول)", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = transition == null, onClick = { transition = null }, label = { Text("تلقائي") })
+                    for (tr in Transition.values()) {
+                        FilterChip(selected = transition == tr, onClick = { transition = tr }, label = { Text(tr.label) })
                     }
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-            )
-        }
-    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(item.copy(startSec = parseTime(startText), motion = motion, transition = transition))
+            }) { Text("حفظ") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+    )
 }

@@ -29,22 +29,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 
 private fun mb(bytes: Long): String = String.format(Locale.US, "%.0f", bytes / 1048576.0)
 
-/** Speech model + automatic timing: download, transcribe, and match the sources to what was said. */
+/** Speech model + automatic timing: download, transcribe. The transcript then feeds [Planner] automatically
+ *  every time the plan is built — there is no separate "matching" step for the user to run. */
 @Composable
 fun AutoCard(
     auto: AutoState,
     project: Project,
     hasTranscript: Boolean,
-    matchMessage: String?,
     actions: AutoActions,
-    onMatchEmpty: () -> Unit,
-    onMatchAll: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -65,7 +62,7 @@ fun AutoCard(
             when {
                 !auto.supported -> {
                     Text(
-                        "التفريغ التلقائي غير مدعوم على معالج هذا الجهاز. يمكنك ضبط التوقيت يدوياً من الأدوات أدناه.",
+                        "التفريغ التلقائي غير مدعوم على معالج هذا الجهاز. بدون نص أو تفريغ، تُوزَّع الصور بالتساوي على مدة الصوت.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Clay.Warning,
                     )
@@ -128,43 +125,21 @@ fun AutoCard(
                 else -> {
                     Text(
                         if (hasTranscript) {
-                            "النص المفرّغ جاهز. طابِق المصادر معه، وعدّل أي علامة يدوياً بعد ذلك."
+                            "النص المفرّغ جاهز، ويُستخدم تلقائياً لمحاذاة القطع والترجمة مع ما قاله المتحدث."
                         } else {
-                            "يفرّغ الصوت بتوقيت كل كلمة، ثم يضع بداية كل مصدر ولحظة التظليل والخلاصة حيث يتكلم المتحدث عنها."
+                            "يفرّغ الصوت بتوقيت كل كلمة، ثم يُستخدم تلقائياً مع النص المكتوب (إن وُجد) لضبط القطع والترجمة."
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = cs.onSurfaceVariant,
                     )
                     if (!hasTranscript) {
-                        Button(onClick = actions.transcribe, enabled = project.sources.isNotEmpty()) {
-                            Text("تفريغ ومطابقة تلقائية")
-                        }
-                        if (project.sources.isEmpty()) {
-                            Text(
-                                "أضف مصدراً واحداً على الأقل أولاً.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = cs.onSurfaceVariant,
-                            )
-                        }
+                        Button(onClick = actions.transcribe) { Text("تفريغ تلقائي") }
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = onMatchEmpty, enabled = project.sources.isNotEmpty()) {
-                                Text("مطابقة (يملأ الفارغ فقط)")
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = onMatchAll, enabled = project.sources.isNotEmpty()) {
-                                Text("مطابقة وإعادة كتابة التوقيتات")
-                            }
-                            TextButton(onClick = actions.transcribe) { Text("إعادة التفريغ") }
-                        }
+                        TextButton(onClick = actions.transcribe) { Text("إعادة التفريغ") }
                     }
                 }
             }
 
-            matchMessage?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = cs.primary, fontWeight = FontWeight.Medium)
-            }
             if (!auto.transcribing && auto.status.isNotBlank() && here) {
                 Text(auto.status, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             }
@@ -195,7 +170,7 @@ private fun indexAt(words: List<Word>, t: Double): Int {
     return ans
 }
 
-/** The words around the playhead; tap a word to jump there, then mark the timing. */
+/** The words around the playhead; tap a word to jump there. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TranscriptCard(words: List<Word>, positionSec: Double, onSeek: (Double) -> Unit) {
@@ -219,11 +194,6 @@ fun TranscriptCard(words: List<Word>, positionSec: Double, onSeek: (Double) -> U
                 val cur = indexAt(words, positionSec)
                 val from = (cur - 25).coerceAtLeast(0)
                 val to = (cur + 60).coerceAtMost(words.size - 1)
-                Text(
-                    "اضغط على كلمة للانتقال إليها، ثم «علّم هنا» على المصدر المحدد.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = cs.onSurfaceVariant,
-                )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),

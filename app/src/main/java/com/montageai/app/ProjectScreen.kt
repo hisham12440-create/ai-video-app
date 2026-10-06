@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,8 +63,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
-/** The project "conversation": greeting, audio, source cards, progress and result, with a composer at the bottom. */
+/** The project "conversation": greeting, audio, script, images and progress/result, with a composer at the bottom. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectScreen(
@@ -77,8 +80,6 @@ fun ProjectScreen(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var audioError by remember { mutableStateOf<String?>(null) }
-    var showSource by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<SourceCard?>(null) }
     var showOptions by remember { mutableStateOf(false) }
 
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -95,15 +96,23 @@ fun ProjectScreen(
         }
     }
     fun pickAudio() = audioPicker.launch(arrayOf("audio/*", "video/mp4"))
-    fun addSource() {
-        editing = null
-        showSource = true
+
+    val imagesPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                val added = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { u -> copyImage(ctx, u)?.let { MediaItem(id = UUID.randomUUID().toString(), path = it) } }
+                }
+                if (added.isNotEmpty()) onChange(project.copy(media = project.media + added))
+            }
+        }
     }
+    fun addImages() = imagesPicker.launch("image/*")
 
     val hasAudio = project.audioPath != null
     val here = gen.projectId == project.id
     val busyHere = gen.busy && here
-    val canCreate = hasAudio && project.sources.isNotEmpty() && !gen.busy
+    val canCreate = hasAudio && project.media.isNotEmpty() && !gen.busy
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -132,12 +141,12 @@ fun ProjectScreen(
                     hint = when {
                         busyHere -> gen.status
                         !hasAudio -> "ابدأ باختيار التسجيل الصوتي"
-                        project.sources.isEmpty() -> "أضف مصدراً واحداً على الأقل"
-                        else -> "جاهز · ${project.sources.size} مصادر · ${project.options.quality.label}"
+                        project.media.isEmpty() -> "أضف صورة واحدة على الأقل"
+                        else -> "جاهز · ${project.media.size} صور · ${project.options.aspect.label}"
                     },
                     canCreate = canCreate,
                     onPickAudio = { pickAudio() },
-                    onAddSource = { addSource() },
+                    onAddImages = { addImages() },
                     onOpenEditor = onOpenEditor,
                     onOptions = { showOptions = true },
                     onCreate = onCreate,
@@ -151,7 +160,7 @@ fun ProjectScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (!hasAudio && project.sources.isEmpty()) {
+                if (!hasAudio && project.media.isEmpty()) {
                     item {
                         Column(
                             Modifier.fillMaxWidth().padding(top = 56.dp),
@@ -165,14 +174,14 @@ fun ProjectScreen(
                                 textAlign = TextAlign.Center,
                             )
                             Text(
-                                "أضف تسجيلك الصوتي ومصادرك، وحدّد التوقيتات في المحرر، وسأرسم لك الفيديو بأسلوب المونتاج الهرمي التفاعلي. بدون مفاتيح ولا إنترنت.",
+                                "أضف تسجيلك الصوتي وصورك، واكتب النص (اختياري)، وسأقص وأحرّك وأضيف الانتقالات والمؤثرات تلقائياً. بدون مفاتيح ولا إنترنت.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                             )
                             Spacer(Modifier.height(4.dp))
                             AssistChip(onClick = { pickAudio() }, label = { Text("اختيار التسجيل الصوتي") })
-                            AssistChip(onClick = { addSource() }, label = { Text("إضافة مصدر") })
+                            AssistChip(onClick = { addImages() }, label = { Text("إضافة صور") })
                         }
                     }
                 } else {
@@ -192,32 +201,53 @@ fun ProjectScreen(
                         }
                     }
                     item {
+                        Bubble(title = "نص التعليق الصوتي (اختياري)") {
+                            Text(
+                                "اكتب النص المنطوق ليُستخدم في الترجمة والمحاذاة الدقيقة للقطع. يمكن تركه فارغاً والاعتماد على التفريغ التلقائي من المحرر.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            OutlinedTextField(
+                                value = project.script,
+                                onValueChange = { onChange(project.copy(script = it)) },
+                                minLines = 3,
+                                maxLines = 10,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    item {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "المصادر والصور (${project.sources.size})",
+                                "الصور (${project.media.size})",
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.weight(1f),
                             )
-                            TextButton(onClick = { addSource() }) { Text("＋ إضافة مصدر") }
+                            TextButton(onClick = { addImages() }) { Text("＋ إضافة صور") }
                         }
                     }
-                    if (project.sources.isEmpty()) {
+                    if (project.media.isEmpty()) {
                         item {
-                            Text(
-                                "أضف المصادر التي ذكرتها في كلامك.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Text("أضف الصور التي سيُبنى منها الفيديو.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    itemsIndexedSources(project.sources) { index, s ->
-                        SourceItem(
+                    itemsIndexedMedia(project.media) { index, m ->
+                        MediaRow(
                             index = index,
-                            s = s,
-                            onEdit = {
-                                editing = s
-                                showSource = true
+                            item = m,
+                            canUp = index > 0,
+                            canDown = index < project.media.size - 1,
+                            onMove = { dir ->
+                                val list = project.media.toMutableList()
+                                val j = index + dir
+                                if (j in list.indices) {
+                                    val tmp = list[index]
+                                    list[index] = list[j]
+                                    list[j] = tmp
+                                    onChange(project.copy(media = list))
+                                }
                             },
-                            onDelete = { onChange(project.copy(sources = project.sources.filter { it.id != s.id })) },
+                            onDelete = { onChange(project.copy(media = project.media.filter { it.id != m.id })) },
                         )
                     }
                 }
@@ -260,22 +290,6 @@ fun ProjectScreen(
         }
     }
 
-    if (showSource) {
-        SourceDialog(
-            initial = editing,
-            onDismiss = { showSource = false },
-            onSave = { card ->
-                val idx = project.sources.indexOfFirst { it.id == card.id }
-                val list = if (idx >= 0) {
-                    project.sources.toMutableList().also { it[idx] = card }
-                } else {
-                    project.sources + card
-                }
-                onChange(project.copy(sources = list))
-                showSource = false
-            },
-        )
-    }
     if (showOptions) {
         OptionsSheet(
             options = project.options,
@@ -285,9 +299,9 @@ fun ProjectScreen(
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.itemsIndexedSources(
-    list: List<SourceCard>,
-    content: @Composable (Int, SourceCard) -> Unit,
+private fun androidx.compose.foundation.lazy.LazyListScope.itemsIndexedMedia(
+    list: List<MediaItem>,
+    content: @Composable (Int, MediaItem) -> Unit,
 ) {
     items(list.size, key = { list[it].id }) { i -> content(i, list[i]) }
 }
@@ -308,7 +322,15 @@ private fun Bubble(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SourceItem(index: Int, s: SourceCard, onEdit: () -> Unit, onDelete: () -> Unit) {
+fun MediaRow(
+    index: Int,
+    item: MediaItem,
+    canUp: Boolean,
+    canDown: Boolean,
+    onMove: (Int) -> Unit,
+    onDelete: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+) {
     val cs = MaterialTheme.colorScheme
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -316,50 +338,36 @@ private fun SourceItem(index: Int, s: SourceCard, onEdit: () -> Unit, onDelete: 
         border = BorderStroke(1.dp, cs.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(28.dp).clip(CircleShape).background(cs.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("${index + 1}", style = MaterialTheme.typography.labelLarge, color = cs.onPrimaryContainer)
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        s.title.ifBlank { "(بدون عنوان)" },
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val sub = listOf(s.author, s.location).filter { it.isNotBlank() }.joinToString(" — ")
-                    if (sub.isNotBlank()) {
-                        Text(sub, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 2)
-                    }
-                }
-                s.startSec?.let {
-                    Text(
-                        "⏱ " + formatTime(it),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = cs.primary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            val bmp = rememberThumb(item.path)
+            Box(
+                Modifier.size(56.dp).clip(RoundedCornerShape(10.dp)).background(cs.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (bmp != null) {
+                    Image(bitmap = bmp, contentDescription = null, modifier = Modifier.fillMaxSize())
+                } else {
+                    Text("${index + 1}", style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
                 }
             }
-            val missing = buildList {
-                if (s.author.isBlank()) add("المؤلف")
-                if (s.publisher.isBlank()) add("الناشر والطبعة")
-                if (s.location.isBlank()) add("المجلد/الصفحة")
-                if (s.quote.isBlank()) add("النص المقتبس")
-                if (s.startSec == null) add("وقت البداية (يُوزَّع تلقائياً)")
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("صورة ${index + 1}", style = MaterialTheme.typography.bodyLarge)
+                val tags = listOfNotNull(
+                    item.motion?.label,
+                    item.transition?.label,
+                    item.startSec?.let { "بداية ${formatTime(it)}" },
+                )
+                if (tags.isNotEmpty()) {
+                    Text(tags.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                }
             }
-            if (missing.isNotEmpty()) {
-                Text("ناقص: " + missing.joinToString("، "), style = MaterialTheme.typography.bodySmall, color = Clay.Warning)
+            if (onEdit != null) {
+                TextButton(onClick = onEdit, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("تعديل") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onEdit) { Text("تعديل") }
-                TextButton(onClick = onDelete) { Text("حذف", color = cs.error) }
-            }
+            TextButton(enabled = canUp, onClick = { onMove(-1) }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("↑") }
+            TextButton(enabled = canDown, onClick = { onMove(1) }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("↓") }
+            TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("حذف", color = cs.error) }
         }
     }
 }
@@ -369,7 +377,7 @@ private fun Composer(
     hint: String,
     canCreate: Boolean,
     onPickAudio: () -> Unit,
-    onAddSource: () -> Unit,
+    onAddImages: () -> Unit,
     onOpenEditor: () -> Unit,
     onOptions: () -> Unit,
     onCreate: () -> Unit,
@@ -401,9 +409,9 @@ private fun Composer(
                             menu = false
                             onPickAudio()
                         })
-                        DropdownMenuItem(text = { Text("إضافة مصدر") }, onClick = {
+                        DropdownMenuItem(text = { Text("إضافة صور") }, onClick = {
                             menu = false
-                            onAddSource()
+                            onAddImages()
                         })
                     }
                 }

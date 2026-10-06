@@ -30,7 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** "Video options" bottom sheet: quality, highlighter color, paper, zoom and sound effects. */
+/** "Video options" bottom sheet: aspect, captions, highlight color, transitions, motion, grade and SFX. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun OptionsSheet(options: ExportOptions, onChange: (ExportOptions) -> Unit, onDismiss: () -> Unit) {
@@ -49,24 +49,31 @@ fun OptionsSheet(options: ExportOptions, onChange: (ExportOptions) -> Unit, onDi
         ) {
             Text("خيارات الفيديو", style = MaterialTheme.typography.titleLarge)
 
-            OptionSection("الجودة") {
+            OptionSection("نسبة الإطار") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (q in Quality.values()) {
+                    for (a in AspectRatio.values()) {
                         FilterChip(
-                            selected = options.quality == q,
-                            onClick = { onChange(options.copy(quality = q)) },
-                            label = { Text(q.label) },
+                            selected = options.aspect == a,
+                            onClick = { onChange(options.copy(aspect = a)) },
+                            label = { Text(a.label) },
                         )
                     }
                 }
-                Text(
-                    "الجودة الأعلى أبطأ وتحتاج ذاكرة أكبر.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
-            OptionSection("لون قلم التظليل") {
+            OptionSection("الترجمة") {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (c in CaptionStyle.values()) {
+                        FilterChip(
+                            selected = options.captions == c,
+                            onClick = { onChange(options.copy(captions = c)) },
+                            label = { Text(c.label) },
+                        )
+                    }
+                }
+            }
+
+            OptionSection("لون تظليل الترجمة") {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     for (c in HighlightColor.values()) {
                         val selected = options.highlight == c
@@ -86,20 +93,33 @@ fun OptionsSheet(options: ExportOptions, onChange: (ExportOptions) -> Unit, onDi
                 }
             }
 
-            OptionSection("خلفية الورق") {
+            OptionSection("أسلوب الانتقالات") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (p in PaperTheme.values()) {
+                    for (p in TransitionPack.values()) {
                         FilterChip(
-                            selected = options.paper == p,
-                            onClick = { onChange(options.copy(paper = p)) },
+                            selected = options.transitions == p,
+                            onClick = { onChange(options.copy(transitions = p)) },
                             label = { Text(p.label) },
                         )
                     }
                 }
             }
 
-            ToggleRow("زوم سينمائي خفيف", options.zoom) { onChange(options.copy(zoom = it)) }
-            ToggleRow("مؤثرات الورق والقلم", options.sfx) { onChange(options.copy(sfx = it)) }
+            OptionSection("سرعة الإطارات (FPS)") {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (f in listOf(24, 30, 60)) {
+                        FilterChip(
+                            selected = options.fps == f,
+                            onClick = { onChange(options.copy(fps = f)) },
+                            label = { Text("$f") },
+                        )
+                    }
+                }
+            }
+
+            ToggleRow("حركة كاميرا سينمائية (Ken Burns)", options.motion) { onChange(options.copy(motion = it)) }
+            ToggleRow("درجة ألوان وتظليل خفيف", options.grade) { onChange(options.copy(grade = it)) }
+            ToggleRow("مؤثرات صوتية عند الانتقالات", options.sfx) { onChange(options.copy(sfx = it)) }
             if (options.sfx) {
                 OptionSection("مستوى المؤثرات") {
                     Slider(

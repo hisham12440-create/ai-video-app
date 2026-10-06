@@ -156,7 +156,8 @@ fun App() {
             gen.progress = 0f
             gen.status = "جاري البدء…"
             try {
-                val out = Pipeline(ctx).run(p) { s, pr ->
+                val transcript = auto.words[p.id]
+                val out = Pipeline(ctx).run(p, transcript) { s, pr ->
                     gen.status = s
                     gen.progress = pr
                 }
@@ -211,7 +212,7 @@ fun App() {
                 auto = auto,
                 actions = actions,
                 onBack = { editorOpen = false },
-                onSourcesChange = { update(current.copy(sources = it)) },
+                onProjectChange = { update(it) },
             )
         } else {
             ProjectScreen(
