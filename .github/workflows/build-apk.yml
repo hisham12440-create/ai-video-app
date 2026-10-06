@@ -34,6 +34,34 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
 
+      - name: Report APK contents and test results
+        if: always()
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          if [ -f "$APK" ]; then
+            LIBS=$(unzip -l "$APK" | grep -E 'lib/.*\.so' | awk '{print $1" "$4}' | tr '\n' ';')
+            echo "::notice title=APK::$(stat -c %s "$APK") bytes. native libs: ${LIBS:-none}"
+          else
+            echo "::error title=APK::app-debug.apk was not produced"
+          fi
+          CACHE=$(find app/.cxx -name CMakeCache.txt 2>/dev/null | head -1)
+          if [ -n "$CACHE" ]; then
+            echo "::notice title=Native build::$(grep -E 'CMAKE_BUILD_TYPE:|ANDROID_ABI:|CMAKE_ANDROID_NDK:' "$CACHE" | tr '\n' ' ')"
+          fi
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+          total = bad = 0
+          lines = []
+          for path in glob.glob("app/build/test-results/testDebugUnitTest/*.xml"):
+              for tc in ET.parse(path).getroot().iter("testcase"):
+                  total += 1
+                  failed = tc.find("failure") is not None or tc.find("error") is not None
+                  bad += failed
+                  lines.append(("FAIL " if failed else "ok ") + tc.get("name"))
+          print("::notice title=Unit tests::total=%d failed=%d | %s" % (total, bad, "; ".join(lines)))
+          PY
+
       - uses: actions/upload-artifact@v4
         with:
           name: montage-ai-debug
