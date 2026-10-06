@@ -11,6 +11,7 @@ import java.util.UUID
 /** Deletes the audio and cover images that belong to a project (called when it is removed). */
 fun deleteProjectFiles(ctx: Context, project: Project) {
     ctx.filesDir.listFiles { _, n -> n.startsWith("audio_${project.id}.") }?.forEach { it.delete() }
+    TranscriptStore.delete(ctx, project.id)
     for (s in project.sources) s.imagePath?.let { File(it).delete() }
 }
 

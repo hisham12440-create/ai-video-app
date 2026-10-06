@@ -2,6 +2,9 @@ package com.montageai.app
 
 import java.io.File
 
+/** One spoken word with its start and end time (seconds) on the voice-over timeline. */
+data class Word(val text: String, val start: Double, val end: Double)
+
 data class SourceCard(
     val id: String,
     val author: String = "",

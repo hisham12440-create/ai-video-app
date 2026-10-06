@@ -106,6 +106,7 @@ fun App() {
     val current = projects.firstOrNull { it.id == currentId } ?: projects.first()
 
     val gen = remember { GenState() }
+    val auto = remember { AutoState(ctx) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Project?>(null) }
@@ -131,6 +132,8 @@ fun App() {
 
     fun deleteProject(p: Project) {
         if (gen.busy && gen.projectId == p.id) return
+        if (auto.transcribing && auto.projectId == p.id) return
+        auto.words.remove(p.id)
         deleteProjectFiles(ctx, p)
         projects.removeAll { it.id == p.id }
         if (projects.isEmpty()) {
@@ -170,6 +173,15 @@ fun App() {
         }
     }
 
+    val actions = AutoActions(
+        download = { auto.download(ctx, scope) },
+        cancelDownload = { auto.cancelDownload() },
+        importModel = { uri -> auto.importModel(ctx, scope, uri) },
+        deleteModel = { auto.deleteModel(ctx) },
+        transcribe = { auto.transcribe(ctx, scope, current) },
+        cancelTranscribe = { auto.cancelTranscribe() },
+    )
+
     BackHandler(enabled = editorOpen) { editorOpen = false }
 
     ModalNavigationDrawer(
@@ -196,6 +208,8 @@ fun App() {
         if (editorOpen) {
             EditorScreen(
                 project = current,
+                auto = auto,
+                actions = actions,
                 onBack = { editorOpen = false },
                 onSourcesChange = { update(current.copy(sources = it)) },
             )

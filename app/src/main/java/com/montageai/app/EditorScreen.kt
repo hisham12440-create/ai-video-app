@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -96,6 +97,8 @@ private fun round1(v: Double): Double = Math.round(v.coerceAtLeast(0.0) * 10.0) 
 @Composable
 fun EditorScreen(
     project: Project,
+    auto: AutoState,
+    actions: AutoActions,
     onBack: () -> Unit,
     onSourcesChange: (List<SourceCard>) -> Unit,
 ) {
@@ -131,6 +134,29 @@ fun EditorScreen(
         undo.add(project.sources)
         if (undo.size > 30) undo.removeAt(0)
         onSourcesChange(new)
+    }
+
+    // ---- automatic timing from the transcript ----
+    val transcript = auto.words[project.id]
+    var matchMessage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(project.id, project.audioPath) { auto.loadTranscript(ctx, project) }
+
+    fun runMatch(onlyEmpty: Boolean) {
+        val w = auto.words[project.id] ?: return
+        val r = Matcher.match(project.sources, w, onlyEmpty)
+        commit(r.sources)
+        matchMessage = buildString {
+            append("وجدتُ ${r.matched} من ${r.total} مصادر في الكلام.")
+            if (r.missing.isNotEmpty()) append(" لم أجد: " + r.missing.joinToString("، ") + ". علّمها يدوياً.")
+        }
+    }
+
+    var handledTick by remember { mutableIntStateOf(auto.doneTick) }
+    LaunchedEffect(auto.doneTick) {
+        if (auto.doneTick != handledTick) {
+            handledTick = auto.doneTick
+            if (auto.doneProject == project.id) runMatch(onlyEmpty = true)
+        }
     }
 
     fun setTime(id: String, kind: Int, sec: Double?) {
@@ -289,6 +315,23 @@ fun EditorScreen(
                 LegendDot(ColorStart, "بداية المصدر")
                 LegendDot(ColorHighlight, "تظليل")
                 LegendDot(ColorConclusion, "خلاصة")
+            }
+
+            AutoCard(
+                auto = auto,
+                project = project,
+                hasTranscript = transcript != null,
+                matchMessage = matchMessage,
+                actions = actions,
+                onMatchEmpty = { runMatch(onlyEmpty = true) },
+                onMatchAll = { runMatch(onlyEmpty = false) },
+            )
+            if (transcript != null && transcript.isNotEmpty()) {
+                TranscriptCard(
+                    words = transcript,
+                    positionSec = player.positionSec,
+                    onSeek = { sec -> player.seekTo((sec * 1000).toInt()) },
+                )
             }
 
             // Tools
