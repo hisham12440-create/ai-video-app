@@ -4,11 +4,10 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import java.nio.ByteOrder
-import java.util.Random
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.exp
-import kotlin.math.sin
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 
 class Pcm(val sampleRate: Int, val samples: ShortArray)
 
@@ -107,100 +106,66 @@ object AudioTools {
         }
     }
 
-    fun mix(voice: ShortArray, sampleRate: Int, events: List<Pair<Double, ShortArray>>, sfxGain: Float): ShortArray {
-        val out = voice.copyOf()
-        for ((time, sfx) in events) {
-            val start = (time * sampleRate).toInt()
-            for (i in sfx.indices) {
+    /** Short-time loudness of the narration, one value per [FRAME] seconds, roughly 0..1. */
+    fun envelope(voice: ShortArray, sampleRate: Int, frame: Double = 0.02): FloatArray {
+        val per = max(1, (sampleRate * frame).toInt())
+        val n = voice.size / per + 1
+        val out = FloatArray(n)
+        for (f in 0 until n) {
+            var sum = 0.0
+            val s = f * per
+            val e = min(voice.size, s + per)
+            for (i in s until e) {
+                val v = voice[i] / 32768.0
+                sum += v * v
+            }
+            out[f] = if (e > s) sqrt(sum / (e - s)).toFloat() else 0f
+        }
+        // fast attack, slower release, so the effects come back smoothly after a word
+        var level = 0f
+        val release = 0.9f
+        for (f in 0 until n) {
+            level = if (out[f] > level) out[f] else level * release + out[f] * (1f - release)
+            out[f] = level
+        }
+        return out
+    }
+
+    class Placed(val startSec: Double, val pcm: ShortArray, val gain: Float)
+
+    /**
+     * Mixes the effects under the narration. Effects are lowered while the narrator speaks (ducking)
+     * so a whoosh never covers a word, and the result is limited so it cannot clip.
+     */
+    fun mixDucked(voice: ShortArray, sampleRate: Int, placed: List<Placed>, master: Float): ShortArray {
+        val acc = FloatArray(voice.size)
+        for (i in voice.indices) acc[i] = voice[i].toFloat()
+        val frame = 0.02
+        val env = envelope(voice, sampleRate, frame)
+        val per = max(1, (sampleRate * frame).toInt())
+        for (p in placed) {
+            val start = (p.startSec * sampleRate).toInt()
+            for (i in p.pcm.indices) {
                 val idx = start + i
-                if (idx < 0 || idx >= out.size) continue
-                val v = out[idx] + (sfx[i] * sfxGain).toInt()
-                out[idx] = v.coerceIn(-32768, 32767).toShort()
+                if (idx < 0 || idx >= acc.size) continue
+                val e = env[min(env.size - 1, idx / per)]
+                val duck = 1f - 0.6f * min(1f, e / 0.2f)
+                acc[idx] += p.pcm[i] * p.gain * master * duck
             }
         }
+        val out = ShortArray(voice.size)
+        for (i in acc.indices) out[i] = acc[i].toInt().coerceIn(-32768, 32767).toShort()
         return out
     }
-}
 
-/**
- * Synthesized Foley-style effects (paper, marker, pencil, wood, sub drop).
- * They are generated procedurally so the app needs no audio assets; swap in real
- * recordings later if you want a richer sound.
- */
-object Sfx {
-    private fun buffer(sr: Int, seconds: Double) = ShortArray((sr * seconds).toInt())
-
-    private fun put(out: ShortArray, i: Int, v: Float) {
-        out[i] = (v * 32767f).toInt().coerceIn(-32768, 32767).toShort()
-    }
-
-    fun paperFlip(sr: Int): ShortArray {
-        val out = buffer(sr, 0.35)
-        val rnd = Random(11)
-        var prev = 0f
-        for (i in out.indices) {
-            val t = i / sr.toFloat()
-            val noise = rnd.nextFloat() * 2f - 1f
-            val hp = noise - prev * 0.85f
-            prev = noise
-            val env = minOf(1f, t / 0.02f) * exp(-t * 11f)
-            put(out, i, hp * env * 0.5f)
+    /** Fades the start and the end so the video does not begin or stop abruptly. */
+    fun fadeEdges(samples: ShortArray, sampleRate: Int, inSec: Double, outSec: Double) {
+        val a = (inSec * sampleRate).toInt()
+        val b = (outSec * sampleRate).toInt()
+        for (i in 0 until min(a, samples.size)) samples[i] = (samples[i] * (i / a.toFloat())).toInt().toShort()
+        for (k in 0 until min(b, samples.size)) {
+            val i = samples.size - 1 - k
+            samples[i] = (samples[i] * (k / b.toFloat())).toInt().toShort()
         }
-        return out
-    }
-
-    fun markerSqueak(sr: Int): ShortArray {
-        val out = buffer(sr, 0.5)
-        val rnd = Random(21)
-        for (i in out.indices) {
-            val t = i / sr.toFloat()
-            val freq = 1900f + 500f * sin(2.0 * PI * 3.0 * t).toFloat()
-            val tone = sin(2.0 * PI * freq * t).toFloat() * 0.10f
-            val noise = (rnd.nextFloat() * 2f - 1f) * 0.12f
-            val env = minOf(1f, t / 0.03f) * minOf(1f, (0.5f - t) / 0.08f)
-            put(out, i, (tone + noise) * env)
-        }
-        return out
-    }
-
-    fun pencilScratch(sr: Int): ShortArray {
-        val out = buffer(sr, 0.7)
-        val rnd = Random(31)
-        var prev = 0f
-        for (i in out.indices) {
-            val t = i / sr.toFloat()
-            val noise = rnd.nextFloat() * 2f - 1f
-            val hp = noise - prev * 0.9f
-            prev = noise
-            val mod = 0.55f + 0.45f * sin(2.0 * PI * 22.0 * t).toFloat()
-            val env = minOf(1f, t / 0.04f) * minOf(1f, (0.7f - t) / 0.1f)
-            put(out, i, hp * mod * env * 0.30f)
-        }
-        return out
-    }
-
-    fun woodClick(sr: Int): ShortArray {
-        val out = buffer(sr, 0.15)
-        val rnd = Random(41)
-        for (i in out.indices) {
-            val t = i / sr.toFloat()
-            val tone = sin(2.0 * PI * 620.0 * t).toFloat() * exp(-t * 55f)
-            val tick = (rnd.nextFloat() * 2f - 1f) * exp(-t * 180f)
-            put(out, i, (tone * 0.5f + tick * 0.4f))
-        }
-        return out
-    }
-
-    fun subDrop(sr: Int): ShortArray {
-        val out = buffer(sr, 1.0)
-        var phase = 0.0
-        for (i in out.indices) {
-            val t = i / sr.toFloat()
-            val freq = 95.0 - 50.0 * minOf(1.0, t.toDouble() / 0.6)
-            phase += 2.0 * PI * freq / sr
-            val env = minOf(1f, t / 0.01f) * exp(-t * 3.2f)
-            put(out, i, sin(phase).toFloat() * env * 0.6f)
-        }
-        return out
     }
 }

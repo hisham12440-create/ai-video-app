@@ -5,36 +5,47 @@ import java.io.File
 /** One spoken word with its start and end time (seconds) on the voice-over timeline. */
 data class Word(val text: String, val start: Double, val end: Double)
 
-data class SourceCard(
-    val id: String,
-    val author: String = "",
-    val title: String = "",
-    val publisher: String = "",
-    val location: String = "",
-    val quote: String = "",
-    val translation: String = "",
-    val imagePath: String? = null,
-    // Manual timing, in seconds on the voice-over timeline
-    val startSec: Double? = null,
-    val highlightPhrase: String = "",
-    val highlightSec: Double? = null,
-    val conclusion: String = "",
-    val conclusionSec: Double? = null,
-)
+/** Output frame shape. Both are 1080p (1080 on the short side). */
+enum class AspectRatio(val label: String, val width: Int, val height: Int) {
+    PORTRAIT("9:16 عمودي", 1080, 1920),
+    LANDSCAPE("16:9 أفقي", 1920, 1080),
+}
 
-data class Scene(
-    val sourceId: String,
-    val start: Double,
-    val end: Double,
-    val highlightPhrase: String,
-    val highlightAt: Double,
-    val conclusion: String,
-    val conclusionAt: Double,
-)
+/** Camera movement applied to a still image while it is on screen. */
+enum class Motion(val label: String) {
+    ZOOM_IN("تكبير"),
+    ZOOM_OUT("تصغير"),
+    PAN_LEFT("تحريك لليسار"),
+    PAN_RIGHT("تحريك لليمين"),
+    PAN_UP("تحريك لأعلى"),
+    PAN_DOWN("تحريك لأسفل"),
+    STILL("ثابت"),
+}
 
-data class Plan(val scenes: List<Scene>)
+/** How one shot enters from the previous one. */
+enum class Transition(val label: String, val seconds: Double) {
+    CUT("قطع مباشر", 0.0),
+    PUNCH("قطع بتكبير", 0.0),
+    FADE("تلاشي", 0.55),
+    SLIDE("انزلاق", 0.45),
+    PUSH("دفع", 0.40),
+    ZOOM("عبور بالتكبير", 0.50),
+    WHIP("سحب سريع", 0.32),
+    FLASH("وميض", 0.36),
+}
 
-data class PickedAudio(val file: File, val name: String, val mime: String)
+/** How varied the automatic choice of transitions is. */
+enum class TransitionPack(val label: String) {
+    AUTO("تلقائي ذكي"),
+    SMOOTH("ناعم"),
+    DYNAMIC("ديناميكي"),
+}
+
+enum class CaptionStyle(val label: String) {
+    KARAOKE("كلمة بكلمة"),
+    SIMPLE("عادي"),
+    OFF("بدون ترجمة"),
+}
 
 enum class HighlightColor(val label: String, val argb: Int) {
     YELLOW("أصفر", 0xFFFFE600.toInt()),
@@ -43,26 +54,28 @@ enum class HighlightColor(val label: String, val argb: Int) {
     BLUE("أزرق", 0xFF80D8FF.toInt()),
 }
 
-enum class PaperTheme(val label: String, val bg: Int, val card: Int, val cover: Int, val ink: Int) {
-    PARCHMENT("ورق قديم", 0xFFF4F1EA.toInt(), 0xFFFBF9F3.toInt(), 0xFFE9E3D3.toInt(), 0xFF1A1A1A.toInt()),
-    KRAFT("ورق كرافت", 0xFFE6D5B8.toInt(), 0xFFF3E8D2.toInt(), 0xFFD9C6A3.toInt(), 0xFF2A1F14.toInt()),
-    WHITE("أبيض نظيف", 0xFFFFFFFF.toInt(), 0xFFFAFAFA.toInt(), 0xFFEDEDED.toInt(), 0xFF111111.toInt()),
-}
-
-enum class Quality(val label: String, val width: Int, val height: Int, val fps: Int) {
-    FAST("سريع · 540p", 540, 960, 24),
-    STANDARD("قياسي · 720p", 720, 1280, 30),
-    HIGH("عالٍ · 1080p", 1080, 1920, 30),
-}
+/** One still image on the timeline. Everything except [path] is optional: null means "decide automatically". */
+data class MediaItem(
+    val id: String,
+    val path: String,
+    val startSec: Double? = null,
+    val motion: Motion? = null,
+    val transition: Transition? = null,
+)
 
 data class ExportOptions(
-    val quality: Quality = Quality.STANDARD,
+    val aspect: AspectRatio = AspectRatio.PORTRAIT,
+    val captions: CaptionStyle = CaptionStyle.KARAOKE,
     val highlight: HighlightColor = HighlightColor.YELLOW,
-    val paper: PaperTheme = PaperTheme.PARCHMENT,
-    val zoom: Boolean = true,
+    val transitions: TransitionPack = TransitionPack.AUTO,
+    val motion: Boolean = true,
+    val grade: Boolean = true,
     val sfx: Boolean = true,
-    val sfxGain: Float = 0.28f,
+    val sfxGain: Float = 0.30f,
+    val fps: Int = 30,
 )
+
+data class PickedAudio(val file: File, val name: String, val mime: String)
 
 data class Project(
     val id: String,
@@ -70,7 +83,9 @@ data class Project(
     val audioPath: String? = null,
     val audioName: String = "",
     val audioMime: String = "",
-    val sources: List<SourceCard> = emptyList(),
+    /** Optional narration text. Used for the captions and to cut at the right sentences. */
+    val script: String = "",
+    val media: List<MediaItem> = emptyList(),
     val options: ExportOptions = ExportOptions(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
