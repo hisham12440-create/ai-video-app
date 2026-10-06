@@ -6,35 +6,19 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/** Saves every project (audio path, sources, export options) in one JSON file on the phone. */
+/** Saves every project (audio, script, images, export options) in one JSON file on the phone. */
 object ProjectStore {
     private fun file(ctx: Context) = File(ctx.filesDir, "projects.json")
 
     fun load(ctx: Context): List<Project> {
         val f = file(ctx)
-        if (f.exists()) {
-            return try {
-                val arr = JSONArray(f.readText())
-                (0 until arr.length()).map { projectFromJson(arr.getJSONObject(it)) }
-            } catch (e: Exception) {
-                emptyList()
-            }
+        if (!f.exists()) return emptyList()
+        return try {
+            val arr = JSONArray(f.readText())
+            (0 until arr.length()).map { projectFromJson(arr.getJSONObject(it)) }
+        } catch (e: Exception) {
+            emptyList()
         }
-        // Migrate the single source list of the first app version into a project.
-        val legacy = File(ctx.filesDir, "sources.json")
-        if (legacy.exists()) {
-            try {
-                val sources = sourcesFromJson(JSONArray(legacy.readText()))
-                if (sources.isNotEmpty()) {
-                    val p = Project(id = UUID.randomUUID().toString(), name = "مشروعي الأول", sources = sources)
-                    save(ctx, listOf(p))
-                    return listOf(p)
-                }
-            } catch (e: Exception) {
-                // ignore a corrupt legacy file
-            }
-        }
-        return emptyList()
     }
 
     fun save(ctx: Context, list: List<Project>) {
@@ -49,28 +33,35 @@ object ProjectStore {
         .put("audioPath", p.audioPath ?: JSONObject.NULL)
         .put("audioName", p.audioName)
         .put("audioMime", p.audioMime)
+        .put("script", p.script)
         .put("updatedAt", p.updatedAt)
-        .put("sources", sourcesToJson(p.sources))
+        .put("media", mediaToJson(p.media))
         .put(
             "options",
             JSONObject()
-                .put("quality", p.options.quality.name)
+                .put("aspect", p.options.aspect.name)
+                .put("captions", p.options.captions.name)
                 .put("highlight", p.options.highlight.name)
-                .put("paper", p.options.paper.name)
-                .put("zoom", p.options.zoom)
+                .put("transitions", p.options.transitions.name)
+                .put("motion", p.options.motion)
+                .put("grade", p.options.grade)
                 .put("sfx", p.options.sfx)
                 .put("sfxGain", p.options.sfxGain.toDouble())
+                .put("fps", p.options.fps)
         )
 
     private fun projectFromJson(o: JSONObject): Project {
         val opts = o.optJSONObject("options")
         val options = if (opts == null) ExportOptions() else ExportOptions(
-            quality = enumOr(opts.optString("quality"), Quality.STANDARD),
+            aspect = enumOr(opts.optString("aspect"), AspectRatio.PORTRAIT),
+            captions = enumOr(opts.optString("captions"), CaptionStyle.KARAOKE),
             highlight = enumOr(opts.optString("highlight"), HighlightColor.YELLOW),
-            paper = enumOr(opts.optString("paper"), PaperTheme.PARCHMENT),
-            zoom = opts.optBoolean("zoom", true),
+            transitions = enumOr(opts.optString("transitions"), TransitionPack.AUTO),
+            motion = opts.optBoolean("motion", true),
+            grade = opts.optBoolean("grade", true),
             sfx = opts.optBoolean("sfx", true),
-            sfxGain = opts.optDouble("sfxGain", 0.28).toFloat(),
+            sfxGain = opts.optDouble("sfxGain", 0.30).toFloat(),
+            fps = opts.optInt("fps", 30),
         )
         return Project(
             id = o.getString("id"),
@@ -78,7 +69,8 @@ object ProjectStore {
             audioPath = if (o.isNull("audioPath")) null else o.optString("audioPath"),
             audioName = o.optString("audioName"),
             audioMime = o.optString("audioMime"),
-            sources = sourcesFromJson(o.optJSONArray("sources") ?: JSONArray()),
+            script = o.optString("script"),
+            media = mediaFromJson(o.optJSONArray("media") ?: JSONArray()),
             options = options,
             updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
         )
@@ -91,46 +83,39 @@ object ProjectStore {
             default
         }
 
-    private fun sourcesToJson(list: List<SourceCard>): JSONArray {
+    private fun mediaToJson(list: List<MediaItem>): JSONArray {
         val arr = JSONArray()
-        for (s in list) {
+        for (m in list) {
             arr.put(
                 JSONObject()
-                    .put("id", s.id)
-                    .put("author", s.author)
-                    .put("title", s.title)
-                    .put("publisher", s.publisher)
-                    .put("location", s.location)
-                    .put("quote", s.quote)
-                    .put("translation", s.translation)
-                    .put("imagePath", s.imagePath ?: JSONObject.NULL)
-                    .put("startSec", s.startSec ?: JSONObject.NULL)
-                    .put("highlightPhrase", s.highlightPhrase)
-                    .put("highlightSec", s.highlightSec ?: JSONObject.NULL)
-                    .put("conclusion", s.conclusion)
-                    .put("conclusionSec", s.conclusionSec ?: JSONObject.NULL)
+                    .put("id", m.id)
+                    .put("path", m.path)
+                    .put("startSec", m.startSec ?: JSONObject.NULL)
+                    .put("motion", m.motion?.name ?: JSONObject.NULL)
+                    .put("transition", m.transition?.name ?: JSONObject.NULL)
             )
         }
         return arr
     }
 
-    private fun sourcesFromJson(arr: JSONArray): List<SourceCard> =
-        (0 until arr.length()).map { i ->
+    private fun mediaFromJson(arr: JSONArray): List<MediaItem> =
+        (0 until arr.length()).mapNotNull { i ->
             val o = arr.getJSONObject(i)
-            SourceCard(
-                id = o.getString("id"),
-                author = o.optString("author"),
-                title = o.optString("title"),
-                publisher = o.optString("publisher"),
-                location = o.optString("location"),
-                quote = o.optString("quote"),
-                translation = o.optString("translation"),
-                imagePath = if (o.isNull("imagePath")) null else o.optString("imagePath"),
+            val path = o.optString("path")
+            if (path.isNullOrBlank() || !File(path).exists()) return@mapNotNull null
+            MediaItem(
+                id = o.optString("id").ifBlank { UUID.randomUUID().toString() },
+                path = path,
                 startSec = if (o.isNull("startSec")) null else o.optDouble("startSec"),
-                highlightPhrase = o.optString("highlightPhrase"),
-                highlightSec = if (o.isNull("highlightSec")) null else o.optDouble("highlightSec"),
-                conclusion = o.optString("conclusion"),
-                conclusionSec = if (o.isNull("conclusionSec")) null else o.optDouble("conclusionSec"),
+                motion = if (o.isNull("motion")) null else enumOrNull<Motion>(o.optString("motion")),
+                transition = if (o.isNull("transition")) null else enumOrNull<Transition>(o.optString("transition")),
             )
+        }
+
+    private inline fun <reified T : Enum<T>> enumOrNull(name: String): T? =
+        try {
+            enumValueOf<T>(name)
+        } catch (e: Exception) {
+            null
         }
 }

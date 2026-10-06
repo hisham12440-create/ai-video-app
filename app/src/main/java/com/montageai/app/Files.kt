@@ -8,11 +8,11 @@ import android.provider.OpenableColumns
 import java.io.File
 import java.util.UUID
 
-/** Deletes the audio and cover images that belong to a project (called when it is removed). */
+/** Deletes the audio and images that belong to a project (called when it is removed). */
 fun deleteProjectFiles(ctx: Context, project: Project) {
     ctx.filesDir.listFiles { _, n -> n.startsWith("audio_${project.id}.") }?.forEach { it.delete() }
     TranscriptStore.delete(ctx, project.id)
-    for (s in project.sources) s.imagePath?.let { File(it).delete() }
+    for (m in project.media) File(m.path).delete()
 }
 
 fun copyAudio(ctx: Context, uri: Uri, projectId: String): PickedAudio {
@@ -36,7 +36,7 @@ fun copyAudio(ctx: Context, uri: Uri, projectId: String): PickedAudio {
 }
 
 fun copyImage(ctx: Context, uri: Uri): String? {
-    val f = File(ctx.filesDir, "cover_${UUID.randomUUID()}.img")
+    val f = File(ctx.filesDir, "media_${UUID.randomUUID()}.img")
     ctx.contentResolver.openInputStream(uri)?.use { input -> f.outputStream().use { out -> input.copyTo(out) } }
         ?: return null
     return f.absolutePath
